@@ -7,85 +7,51 @@ import (
 	"os"
 )
 
+var (
+	DefaultLog           *Log
+	DefaultSugaredLogger *zap.SugaredLogger
+	_defaultOptions      *options
+)
+
+func init() {
+	DefaultLog = &Log{New().WithOptions(zap.AddCallerSkip(1))}
+	DefaultSugaredLogger = DefaultLog.Sugar()
+	_defaultOptions = &options{
+		level:      InfoLevel,
+		filename:   "",
+		maxSize:    100,
+		maxBackups: 0,
+		maxAge:     0,
+		localTime:  true,
+		compress:   true,
+	}
+}
+
+func Init(opts ...Option) *Log {
+	DefaultLog = &Log{New(opts...).WithOptions(zap.AddCallerSkip(1))}
+	DefaultSugaredLogger = DefaultLog.Sugar()
+	return DefaultLog
+}
+
 type Log struct {
 	*zap.Logger
 }
 
-type Config struct {
-	// Logging priority. Higher levels are more important.
-	Level zapcore.Level
-
-	// Filename is the file to write logs to.  Backup log files will be retained
-	// in the same directory.  It uses <processname>-lumberjack.log in
-	// os.TempDir() if empty.
-	Filename string `json:"filename" yaml:"filename"`
-
-	// MaxSize is the maximum size in megabytes of the log file before it gets
-	// rotated. It defaults to 100 megabytes.
-	MaxSize int `json:"maxsize" yaml:"maxsize"`
-
-	// MaxAge is the maximum number of days to retain old log files based on the
-	// timestamp encoded in their filename.  Note that a day is defined as 24
-	// hours and may not exactly correspond to calendar days due to daylight
-	// savings, leap seconds, etc. The default is not to remove old log files
-	// based on age.
-	MaxAge int `json:"maxage" yaml:"maxage"`
-
-	// MaxBackups is the maximum number of old log files to retain.  The default
-	// is to retain all old log files (though MaxAge may still cause them to get
-	// deleted.)
-	MaxBackups int `json:"maxbackups" yaml:"maxbackups"`
-
-	// LocalTime determines if the time used for formatting the timestamps in
-	// backup files is the computer's local time.  The default is to use UTC
-	// time.
-	LocalTime bool `json:"localtime" yaml:"localtime"`
-
-	// Compress determines if the rotated log files should be compressed
-	// using gzip. The default is not to perform compression.
-	Compress bool `json:"compress" yaml:"compress"`
-}
-
-const (
-	DebugLevel = zapcore.DebugLevel
-	InfoLevel  = zapcore.InfoLevel
-	WarnLevel  = zapcore.WarnLevel
-	ErrorLevel = zapcore.ErrorLevel
-	PanicLevel = zapcore.PanicLevel
-	FatalLevel = zapcore.FatalLevel
-)
-
-func Level(level string) zapcore.Level {
-	switch level {
-	case "debug":
-		return DebugLevel
-	case "info":
-		return InfoLevel
-	case "warn":
-		return WarnLevel
-	case "error":
-		return ErrorLevel
-	case "panic":
-		return PanicLevel
-	case "fatal":
-		return FatalLevel
-	default:
-		return InfoLevel
+func New(opts ...Option) *Log {
+	options := *_defaultOptions
+	for _, o := range opts {
+		o.apply(&options)
 	}
-}
 
-func New(c *Config) *Log {
-	var w zapcore.WriteSyncer
-	if c.Filename == "" {
-		w = os.Stdout
-	} else {
+	var w zapcore.WriteSyncer = os.Stdout
+	if options.filename != "" {
 		w = zapcore.AddSync(&lumberjack.Logger{
-			Filename:   c.Filename,
-			MaxSize:    c.MaxSize,
-			MaxAge:     c.MaxAge,
-			MaxBackups: c.MaxBackups,
-			LocalTime:  c.LocalTime,
-			Compress:   c.Compress,
+			Filename:   options.filename,
+			MaxSize:    options.maxSize,
+			MaxBackups: options.maxBackups,
+			MaxAge:     options.maxAge,
+			LocalTime:  options.localTime,
+			Compress:   options.compress,
 		})
 	}
 	e := zap.NewProductionEncoderConfig()
@@ -93,24 +59,10 @@ func New(c *Config) *Log {
 	core := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(e),
 		w,
-		c.Level,
+		options.level,
 	)
 
 	return &Log{zap.New(core, zap.AddCaller())}
-}
-
-var DefaultLog *Log
-var DefaultSugaredLogger *zap.SugaredLogger
-
-func init() {
-	DefaultLog = &Log{New(&Config{Level: InfoLevel}).WithOptions(zap.AddCallerSkip(1))}
-	DefaultSugaredLogger = DefaultLog.Sugar()
-}
-
-func Init(c *Config) *Log {
-	DefaultLog = &Log{New(c).WithOptions(zap.AddCallerSkip(1))}
-	DefaultSugaredLogger = DefaultLog.Sugar()
-	return DefaultLog
 }
 
 func Debug(args ...interface{}) {
@@ -209,6 +161,6 @@ func Fatalz(msg string, fields ...zap.Field) {
 	DefaultLog.Fatal(msg, fields...)
 }
 
-func WithOptions(opts ...zap.Option) *Log {
+func WithZapOptions(opts ...zap.Option) *Log {
 	return &Log{DefaultLog.Logger.WithOptions(opts...)}
 }
