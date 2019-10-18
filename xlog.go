@@ -14,8 +14,6 @@ var (
 )
 
 func init() {
-	DefaultLog = &Log{New().WithOptions(zap.AddCallerSkip(1))}
-	DefaultSugaredLogger = DefaultLog.Sugar()
 	_defaultOptions = &options{
 		level:      InfoLevel,
 		filename:   "",
@@ -25,6 +23,8 @@ func init() {
 		localTime:  true,
 		compress:   true,
 	}
+	DefaultLog = &Log{New().WithOptions(zap.AddCallerSkip(1))}
+	DefaultSugaredLogger = DefaultLog.Sugar()
 }
 
 func Init(opts ...Option) *Log {
